@@ -55,6 +55,7 @@ public class FaqController {
     @GetMapping("/ask")
     public String ask(@RequestParam(value = "message", defaultValue = "How many athletes compete in the Olympic Games Paris 2024") String message) {
         // Perform similarity search with a metadata filter for "uploaded" documents
+        //String filterExpression = String.format("source == '%s'", source);
         SearchRequest searchRequest = SearchRequest.query(message)
                 .withTopK(2)
                 .withFilterExpression("source == 'uploaded'");// Filter to include only user-uploaded files

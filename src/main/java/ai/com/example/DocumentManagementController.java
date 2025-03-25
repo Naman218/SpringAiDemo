@@ -1,13 +1,13 @@
 package ai.com.example;
 
 
-import org.apache.pdfbox.pdmodel.PDDocument;
-import org.apache.pdfbox.text.PDFTextStripper;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.document.Document;
-import org.springframework.ai.reader.TextReader;
+import org.springframework.ai.reader.tika.TikaDocumentReader;
 import org.springframework.ai.transformer.splitter.TextSplitter;
 import org.springframework.ai.transformer.splitter.TokenTextSplitter;
 import org.springframework.ai.vectorstore.ChromaVectorStore;
+import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
@@ -15,20 +15,14 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
-import org.springframework.ai.vectorstore.SearchRequest;
 
-import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.stream.Collectors;
-import org.springframework.ai.reader.pdf.PagePdfDocumentReader;
-
+@Slf4j
 @RestController
 @RequestMapping("/api/documents")
 public class DocumentManagementController {
@@ -84,8 +78,11 @@ public class DocumentManagementController {
     /**
      * List all available documents
      */
+
     @GetMapping("/list")
     public ResponseEntity<List<Map<String, Object>>> listDocuments() throws IOException {
+        log.info("Fetching document list...");
+
         List<Map<String, Object>> fileList = Files.list(uploadDir)
                 .filter(Files::isRegularFile)
                 .map(path -> {
@@ -94,16 +91,26 @@ public class DocumentManagementController {
                     try {
                         fileInfo.put("size", Files.size(path));
                         fileInfo.put("uploadTime", Files.getLastModifiedTime(path).toMillis());
-                        fileInfo.put("inChromaDb", isInChromaDb(path.getFileName().toString()));
+
+                        boolean inDb = isInChromaDb(path.getFileName().toString());
+                        fileInfo.put("inChromaDb", inDb);
+
+                        log.info("File: {} | Size: {} bytes | In ChromaDB: {}",
+                                path.getFileName().toString(),
+                                Files.size(path),
+                                inDb);
                     } catch (IOException e) {
                         fileInfo.put("error", "Could not read file metadata");
+                        log.error("Error reading metadata for file: {}", path.getFileName(), e);
                     }
                     return fileInfo;
                 })
                 .collect(Collectors.toList());
 
+        log.info("Total files listed: {}", fileList.size());
         return ResponseEntity.ok(fileList);
     }
+
 
     /**
      * Process selected files and store them in ChromaDB
@@ -114,6 +121,7 @@ public class DocumentManagementController {
 
     @PostMapping("/process")
     public ResponseEntity<Map<String, Object>> processFiles(@RequestBody List<String> filenames) {
+        log.info("Processing files: {}", filenames);
         Map<String, Object> response = new HashMap<>();
         List<String> processedFiles = new ArrayList<>();
         List<String> failedFiles = new ArrayList<>();
@@ -123,21 +131,19 @@ public class DocumentManagementController {
             Path filePath = uploadDir.resolve(filename);
 
             if (!Files.exists(filePath)) {
+                log.warn("File not found: {}", filename);
                 failedFiles.add(filename + " (file not found)");
                 continue;
             }
 
             try {
-                List<Document> documents = new ArrayList<>();
+                List<Document> documents;
                 Resource fileResource = new FileSystemResource(filePath);
 
-                if (filename.toLowerCase().endsWith(".pdf")) {
-                    PagePdfDocumentReader pdfReader = new PagePdfDocumentReader(fileResource);
-                    documents = pdfReader.get();
-                } else {
-                    TextReader textReader = new TextReader(fileResource);
-                    documents = textReader.get();
-                }
+                // Use TikaDocumentReader for all file types
+                TikaDocumentReader tikaReader = new TikaDocumentReader(fileResource);
+                documents = tikaReader.get();
+                log.info("Extracted {} documents from file: {}", documents.size(), filename);
 
                 // Add metadata for filtering
                 for (Document doc : documents) {
@@ -148,13 +154,16 @@ public class DocumentManagementController {
                 // Split documents for better vector indexing
                 TextSplitter textSplitter = new TokenTextSplitter();
                 List<Document> splitDocuments = textSplitter.apply(documents);
+                log.info("Split into {} smaller documents for file: {}", splitDocuments.size(), filename);
 
                 // Add to ChromaDB
                 chromaVectorStore.add(splitDocuments);
+                log.info("Added {} documents to ChromaDB for file: {}", splitDocuments.size(), filename);
 
                 processedFiles.add(filename);
                 totalDocuments += splitDocuments.size();
             } catch (Exception e) {
+                log.error("Error processing file {}: {}", filename, e.getMessage(), e);
                 failedFiles.add(filename + " (" + e.getMessage() + ")");
             }
         }
@@ -162,6 +171,8 @@ public class DocumentManagementController {
         response.put("processedFiles", processedFiles);
         response.put("failedFiles", failedFiles);
         response.put("totalDocumentsAdded", totalDocuments);
+
+        log.info("Processing completed. Total documents added: {}", totalDocuments);
 
         return failedFiles.isEmpty()
                 ? ResponseEntity.ok(response)
@@ -171,45 +182,68 @@ public class DocumentManagementController {
 
 
 
+
     /**
      * Check if a specific document is in ChromaDB by checking its metadata
      */
-    private boolean isInChromaDb(String filename) {
-        try {
-            // Create a filter expression for the metadata
-            String filterExpression = "filename = '" + filename + "'";
+    public boolean isInChromaDb(String filename) {
+        log.info("Checking if file '{}' exists in ChromaDB...", filename);
 
-            // Use the correct SearchRequest syntax
-            return !chromaVectorStore.similaritySearch(
-                            SearchRequest.defaults()
-                                    .withFilterExpression(filterExpression)
-                                    .withTopK(1))
-                    .isEmpty();
-        } catch (Exception e) {
-            return false;
-        }
+        SearchRequest searchRequest = SearchRequest.defaults()
+                .withFilterExpression("filename == '" + filename + "'") // Use filter expression
+                .withTopK(100);
+
+        List<Document> result = chromaVectorStore.doSimilaritySearch(searchRequest);
+
+        boolean exists = !result.isEmpty();
+        log.info("File '{}' in ChromaDB: {}", filename, exists);
+        return exists;
     }
+
+
 
     /**
      * Delete a document from ChromaDB (by metadata filter)
      */
-    /*
     @DeleteMapping("/{filename}")
     public ResponseEntity<Map<String, Object>> deleteDocument(@PathVariable String filename) {
         Map<String, Object> response = new HashMap<>();
 
         try {
-            // Delete from ChromaDB by metadata
-            Map<String, String> metadataFilter = Map.of("filename", filename);
-            chromaVectorStore.delete(metadataFilter);
+            // Step 1: Search for documents with metadata filter
+            SearchRequest searchRequest = SearchRequest.defaults()
+                    .withFilterExpression("filename == '" + filename + "'") // Use filter expression
+                    .withTopK(100); // Adjust based on expected document count
 
-            // Optionally delete the file from local storage
+
+            List<Document> documents = chromaVectorStore.similaritySearch(searchRequest);
+
+            if (documents.isEmpty()) {
+                response.put("message", "No documents found in ChromaDB for the given filename");
+            } else {
+                // Step 2: Extract document IDs
+                List<String> documentIds = documents.stream()
+                        .map(Document::getId) // Ensure Document has an `id` field
+                        .toList();
+
+                // Step 3: Delete documents using IDs
+                Optional<Boolean> deleteSuccess = chromaVectorStore.delete(documentIds);
+
+                if (deleteSuccess.orElse(false)) {
+                    response.put("message", "Documents deleted from ChromaDB");
+                } else {
+                    response.put("error", "Failed to delete documents from ChromaDB");
+                    return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+                }
+            }
+
+            // Step 4: Optionally delete the file from local storage
             Path filePath = uploadDir.resolve(filename);
             if (Files.exists(filePath)) {
                 Files.delete(filePath);
-                response.put("message", "Document deleted from ChromaDB and local storage");
+                response.put("fileDeletion", "Document deleted from local storage");
             } else {
-                response.put("message", "Document deleted from ChromaDB only (file not found locally)");
+                response.put("fileDeletion", "File not found in local storage");
             }
 
             return ResponseEntity.ok(response);
@@ -217,5 +251,6 @@ public class DocumentManagementController {
             response.put("error", "Failed to delete document: " + e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }
-    }*/
+    }
+
 }
