@@ -1,0 +1,1 @@
+SpringAi demo with chroma db and OLLAMA
