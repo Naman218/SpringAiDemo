@@ -11,8 +11,11 @@ public class FunctionConfiguration {
 
     private final EmailService emailService;
 
-    public FunctionConfiguration(EmailService emailService) {
+    private final WeatherService weatherService;
+
+    public FunctionConfiguration(EmailService emailService,WeatherService weatherService) {
         this.emailService = emailService;
+        this.weatherService=weatherService;
     }
 
     @Bean
@@ -20,5 +23,12 @@ public class FunctionConfiguration {
     public Function<EmailService.EmailRequest, EmailService.EmailResponse> sendEmailFunction() {
         return emailService;
     }
+
+    @Bean
+    @Description("Fetch the current weather for a given location.")
+    public Function<WeatherService.WeatherRequest, WeatherService.WeatherResponse> getWeatherFunction() {
+        return weatherService; // or inject it via constructor if using @Service
+    }
+
 }
 
