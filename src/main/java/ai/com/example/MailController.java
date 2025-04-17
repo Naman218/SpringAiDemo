@@ -35,7 +35,7 @@ public class MailController {
     ) {
         this.chatClient = builder
                 .defaultSystem("You are a helpful AI Assistant that generates professional email communications.")
-                .defaultFunctions("sendEmailFunction")
+                .defaultTools("sendEmailFunction")
                 .build();
 
         // Load prompt template
@@ -101,6 +101,7 @@ public class MailController {
             // Check for successful sending
             if (sendResponse.toLowerCase().contains("success") ||
                     sendResponse.toLowerCase().contains("sent") ||
+                    sendResponse.toLowerCase().contains("email delivered") ||
                     sendResponse.toLowerCase().contains("delivered")) {
                 return ResponseEntity
                         .ok()

@@ -15,7 +15,7 @@ public class WeatherController {
     public WeatherController(ChatClient.Builder builder) {
         this.chatClient = builder
                 .defaultSystem("You are a helpful weather assistant that provides clear, friendly explanations about weather conditions. When asked about weather, always call the getWeatherFunction tool to retrieve accurate data. Then explain the weather information in simple, conversational language that anyone can understand. Include practical advice based on the conditions (like clothing recommendations or activity suggestions). For air quality information, explain what the numbers mean for people's health and daily activities. Always translate technical weather terms into everyday language and give context for temperature, humidity, and other measurements.")
-                .defaultFunctions("getWeatherFunction") // Enable the function
+                .defaultTools("getWeatherFunction") // Enable the function
                 .build();
     }
 

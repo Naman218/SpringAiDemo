@@ -14,7 +14,6 @@ public class WeatherService implements Function<WeatherService.WeatherRequest, W
 
     @Override
     public WeatherResponse apply(WeatherRequest request) {
-        // Add the aqi=yes parameter to your URL
         String url = "https://api.weatherapi.com/v1/current.json?q=" + request.location +
                 "&key=" + apiKey + "&aqi=yes";
         RestTemplate restTemplate = new RestTemplate();
