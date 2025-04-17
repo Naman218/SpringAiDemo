@@ -15,23 +15,29 @@ java {
 
 repositories {
 	mavenCentral()
-	maven { url 'https://repo.spring.io/milestone' }
 }
 
 ext {
-	set('springAiVersion', "1.0.0-M4")
+	set('springAiVersion', "1.0.0-M7")
 }
 
 dependencies {
-	implementation 'org.springframework.ai:spring-ai-pdf-document-reader'
 	implementation 'org.springframework.boot:spring-boot-starter-web'
-	implementation 'org.springframework.ai:spring-ai-ollama-spring-boot-starter'
-	implementation 'org.springframework.ai:spring-ai-tika-document-reader'
-	implementation 'org.springframework.ai:spring-ai-chroma-store-spring-boot-starter'
 	implementation 'org.springframework.boot:spring-boot-starter-mail'
 	implementation 'org.springframework.boot:spring-boot-starter-thymeleaf'
+
+	// Spring AI dependencies (updated for M7)
+	implementation 'org.springframework.ai:spring-ai-pdf-document-reader'
+	implementation 'org.springframework.ai:spring-ai-tika-document-reader'
+	implementation 'org.springframework.ai:spring-ai-starter-model-ollama'
+	implementation 'org.springframework.ai:spring-ai-starter-vector-store-chroma'
+	implementation 'org.springframework.ai:spring-ai-advisors-vector-store:1.0.0-M7'
+
+	// Lombok
 	compileOnly 'org.projectlombok:lombok'
 	annotationProcessor 'org.projectlombok:lombok'
+
+	// Testing
 	testImplementation 'org.springframework.boot:spring-boot-starter-test'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }

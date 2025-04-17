@@ -23,7 +23,7 @@ public class EmailController {
     public EmailController(ChatClient.Builder builder) {
         this.chatClient = builder
                 .defaultSystem("You are a helpful AI Assistant that generates a proper email subject and body.")
-                .defaultFunctions("sendEmailFunction")
+                .defaultTools("sendEmailFunction")
                 .build();
     }
 

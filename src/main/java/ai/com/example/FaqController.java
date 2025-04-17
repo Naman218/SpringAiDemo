@@ -2,7 +2,7 @@ package ai.com.example;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.ai.chat.client.advisor.QuestionAnswerAdvisor;
+import org.springframework.ai.chat.client.advisor.vectorstore.QuestionAnswerAdvisor;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.chat.prompt.PromptTemplate;
 import org.springframework.ai.document.Document;
@@ -31,14 +31,19 @@ public class FaqController {
     public FaqController(ChatClient.Builder builder, VectorStore vectorStore) {
         this.vectorStore = vectorStore;
         this.chatClient = builder
-                .defaultAdvisors(new QuestionAnswerAdvisor(vectorStore,SearchRequest.defaults()))
+                .defaultAdvisors(new QuestionAnswerAdvisor(vectorStore,SearchRequest.builder().build()))
                 .build();
     }
 
     @GetMapping("/faq")
     public String faq(@RequestParam(value = "message", defaultValue = "How many athletes compete in the Olympic Games Paris 2024") String message) {
-        List<Document> similarDocuments = vectorStore.similaritySearch(SearchRequest.query(message).withTopK(2));
-        List<String> contentList = similarDocuments.stream().map(Document::getContent).toList();
+        List<Document> similarDocuments = vectorStore.similaritySearch(
+                SearchRequest.builder()
+                        .query(message)
+                        .topK(2)
+                        .build()
+        );
+        List<String> contentList = similarDocuments.stream().map(Document::getText).toList();
         //create a prompt template so that LLM/bot answer accordingly
         PromptTemplate promptTemplate = new PromptTemplate (ragPromptTemplate);
         Map<String,Object> promptParameters= new HashMap();
@@ -56,12 +61,15 @@ public class FaqController {
     public String ask(@RequestParam(value = "message", defaultValue = "How many athletes compete in the Olympic Games Paris 2024") String message) {
         // Perform similarity search with a metadata filter for "uploaded" documents
         //String filterExpression = String.format("source == '%s'", source);
-        SearchRequest searchRequest = SearchRequest.query(message)
-                .withTopK(2)
-                .withFilterExpression("source == 'uploaded'");// Filter to include only user-uploaded files
+        SearchRequest searchRequest = SearchRequest.builder()
+                .query(message)
+                .topK(2)
+                .filterExpression("source == 'uploaded'")
+                .build();
 
+        // Filter to include only user-uploaded files
         List<Document> similarDocuments = vectorStore.similaritySearch(searchRequest);
-        List<String> contentList = similarDocuments.stream().map(Document::getContent).toList();
+        List<String> contentList = similarDocuments.stream().map(Document::getText).toList();
 
         // Prepare the prompt
         PromptTemplate promptTemplate = new PromptTemplate(ragPromptTemplate);

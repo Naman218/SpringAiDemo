@@ -2,11 +2,11 @@ package ai.com.example;
 
 
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.ai.chroma.vectorstore.ChromaVectorStore;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.reader.tika.TikaDocumentReader;
 import org.springframework.ai.transformer.splitter.TextSplitter;
 import org.springframework.ai.transformer.splitter.TokenTextSplitter;
-import org.springframework.ai.vectorstore.ChromaVectorStore;
 import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.FileSystemResource;
@@ -189,9 +189,11 @@ public class DocumentManagementController {
     public boolean isInChromaDb(String filename) {
         log.info("Checking if file '{}' exists in ChromaDB...", filename);
 
-        SearchRequest searchRequest = SearchRequest.defaults()
-                .withFilterExpression("filename == '" + filename + "'") // Use filter expression
-                .withTopK(100);
+        SearchRequest searchRequest = SearchRequest.builder()
+                .topK(100)
+                .filterExpression("filename == '" + filename + "'")
+                .build();
+
 
         List<Document> result = chromaVectorStore.doSimilaritySearch(searchRequest);
 
@@ -211,15 +213,17 @@ public class DocumentManagementController {
 
         try {
             // Step 1: Search for documents with metadata filter
-            SearchRequest searchRequest = SearchRequest.defaults()
-                    .withFilterExpression("filename == '" + filename + "'") // Use filter expression
-                    .withTopK(100); // Adjust based on expected document count
-
+            SearchRequest searchRequest = SearchRequest.builder()
+                    .topK(100)
+                    .filterExpression("filename == '" + filename + "'")
+                    .build();
+            // Adjust based on expected document count
 
             List<Document> documents = chromaVectorStore.similaritySearch(searchRequest);
 
             if (documents.isEmpty()) {
                 response.put("message", "No documents found in ChromaDB for the given filename");
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);  // Ensure a response is returned
             } else {
                 // Step 2: Extract document IDs
                 List<String> documentIds = documents.stream()
@@ -227,30 +231,32 @@ public class DocumentManagementController {
                         .toList();
 
                 // Step 3: Delete documents using IDs
-                Optional<Boolean> deleteSuccess = chromaVectorStore.delete(documentIds);
-
-                if (deleteSuccess.orElse(false)) {
+                try {
+                    chromaVectorStore.delete(documentIds); // This now returns void, no need to check success
+                    // Deletion was successful
                     response.put("message", "Documents deleted from ChromaDB");
-                } else {
+                } catch (Exception e) {
+                    // Handle deletion failure
                     response.put("error", "Failed to delete documents from ChromaDB");
                     return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
                 }
-            }
 
-            // Step 4: Optionally delete the file from local storage
-            Path filePath = uploadDir.resolve(filename);
-            if (Files.exists(filePath)) {
-                Files.delete(filePath);
-                response.put("fileDeletion", "Document deleted from local storage");
-            } else {
-                response.put("fileDeletion", "File not found in local storage");
-            }
+                // Step 4: Optionally delete the file from local storage
+                Path filePath = uploadDir.resolve(filename);
+                if (Files.exists(filePath)) {
+                    Files.delete(filePath);
+                    response.put("fileDeletion", "Document deleted from local storage");
+                } else {
+                    response.put("fileDeletion", "File not found in local storage");
+                }
 
-            return ResponseEntity.ok(response);
+                return ResponseEntity.ok(response);
+            }
         } catch (Exception e) {
             response.put("error", "Failed to delete document: " + e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }
     }
+
 
 }

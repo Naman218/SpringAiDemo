@@ -2,24 +2,18 @@ package ai.com.example;
 
 
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.ai.chroma.ChromaApi;
 import org.springframework.ai.embedding.EmbeddingModel;
-import org.springframework.ai.reader.TextReader;
-import org.springframework.ai.transformer.splitter.TextSplitter;
-import org.springframework.ai.transformer.splitter.TokenTextSplitter;
-import org.springframework.ai.vectorstore.ChromaVectorStore;
-import org.springframework.ai.vectorstore.SimpleVectorStore;
+import org.springframework.ai.chroma.vectorstore.ChromaApi;
+import org.springframework.ai.chroma.vectorstore.ChromaVectorStore;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.io.Resource;
 
-import org.springframework.ai.document.Document;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.List;
 
 @Slf4j
 @Configuration
@@ -60,7 +54,7 @@ public class RagConfiguration {
         ChromaApi chromaApi = new ChromaApi("http://localhost:8000");
 
         // Initialize ChromaVectorStore with builder pattern and proper configuration
-      return new ChromaVectorStore.Builder(embeddingModel, chromaApi)
+      return ChromaVectorStore.builder(chromaApi, embeddingModel)
                 .collectionName("documents_collection")              // Ensure collection name matches existing collection
                 .initializeSchema(true)                // Creates collection if it doesn't exist
                 .initializeImmediately(true)          // Immediately initializes and sets collectionId
